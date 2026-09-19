@@ -4,9 +4,13 @@ Generic ReAct agent loop — reused by every specialist agent and the orchestrat
 Now instrumented with:
 - Opik for observability (traces to dashboard)
 - Chainlit for UI (tool calls appear as expandable steps in the chat)
+
+Supports both stateless (fresh messages each call) and stateful (persistent
+messages across calls) modes via the optional `messages` parameter.
 """
 
 import json
+from typing import Optional
 from openai import OpenAI
 from opik import track
 from opik.integrations.openai import track_openai
@@ -26,17 +30,27 @@ async def execute_tool(fn_name: str, fn_args: dict, tool_functions: dict) -> str
 
 
 @track(capture_input=True, capture_output=True)
-async def run_agent(system_prompt: str, user_message: str, tool_schemas: list, tool_functions: dict) -> str:
+async def run_agent(
+    system_prompt: str,
+    user_message: str,
+    tool_schemas: list,
+    tool_functions: dict,
+    messages: Optional[list] = None,
+) -> str:
     """
     Run a complete agent turn: prompt -> tool calls -> final response.
-    Each tool call shows as a sub-step in the Chainlit UI.
+
+    If `messages` is provided, the agent appends to it (stateful — remembers
+    previous calls). If None, creates a fresh conversation (stateless).
     """
     client = track_openai(OpenAI())
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
+    if messages is None:
+        messages = [
+            {"role": "system", "content": system_prompt},
+        ]
+
+    messages.append({"role": "user", "content": user_message})
 
     for turn in range(MAX_TURNS):
         kwargs = {"model": MODEL, "messages": messages}
