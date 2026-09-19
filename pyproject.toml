@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stock-trading-agent"
+version = "0.1.0"
+description = "Multi-agent stock trading system with GPT-4o-mini, Alpaca paper trading, and real-time market analysis"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "openai>=1.0.0",
+    "yfinance>=0.2.0",
+    "alpaca-trade-api>=3.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.28.0",
+    "opik>=1.0.0",
+    "chainlit>=1.0.0",
+]
+
+[project.scripts]
+stock-agent = "main:main"

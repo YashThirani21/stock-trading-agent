@@ -1,0 +1,14 @@
+.env
+.git
+__pycache__
+*.pyc
+*.pyo
+.chainlit
+.venv
+venv
+env
+.idea
+.vscode
+*.swp
+*.swo
+CLAUDE.md
