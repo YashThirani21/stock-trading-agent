@@ -15,9 +15,7 @@ from openai import OpenAI
 from opik import track
 from opik.integrations.openai import track_openai
 import chainlit as cl
-
-MODEL = "gpt-4o-mini"
-MAX_TURNS = 10
+from config import MODEL, MAX_TURNS_SPECIALIST
 
 
 @track(capture_input=True, capture_output=True)
@@ -52,7 +50,7 @@ async def run_agent(
 
     messages.append({"role": "user", "content": user_message})
 
-    for turn in range(MAX_TURNS):
+    for turn in range(MAX_TURNS_SPECIALIST):
         kwargs = {"model": MODEL, "messages": messages}
         if tool_schemas:
             kwargs["tools"] = tool_schemas
