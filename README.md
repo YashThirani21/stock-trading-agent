@@ -50,7 +50,7 @@ cd stock-trading-agent
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install .
 
 cp .env.example .env
 # Fill in your API keys in .env
