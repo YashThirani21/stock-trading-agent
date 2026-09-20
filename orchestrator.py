@@ -13,7 +13,7 @@ from opik.integrations.openai import track_openai
 
 from agent_loop import _stream_completion
 from agents import AGENT_SCHEMAS, AGENT_FUNCTIONS
-from config import MODEL, MAX_TURNS_ORCHESTRATOR, ORCHESTRATOR_PROMPT
+from config import MODEL_ORCHESTRATOR, MAX_TURNS_ORCHESTRATOR, ORCHESTRATOR_PROMPT
 
 
 def create_client():
@@ -34,7 +34,7 @@ async def run_orchestrator(client, messages, on_agent_call=None, on_token=None):
     """
     for turn in range(MAX_TURNS_ORCHESTRATOR):
         kwargs = {
-            "model": MODEL,
+            "model": MODEL_ORCHESTRATOR,
             "messages": messages,
             "tools": AGENT_SCHEMAS,
             "tool_choice": "auto",

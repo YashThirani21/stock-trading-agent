@@ -8,7 +8,8 @@ _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
 with open(_CONFIG_PATH) as f:
     _config = yaml.safe_load(f)
 
-MODEL = _config["model"]
+MODEL_ORCHESTRATOR = _config["models"]["orchestrator"]
+MODEL_SPECIALIST = _config["models"]["specialist"]
 MAX_TURNS_ORCHESTRATOR = _config["max_turns"]["orchestrator"]
 MAX_TURNS_SPECIALIST = _config["max_turns"]["specialist"]
 

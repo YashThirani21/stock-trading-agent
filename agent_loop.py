@@ -16,7 +16,7 @@ from openai import AsyncOpenAI
 from opik import track
 from opik.integrations.openai import track_openai
 import chainlit as cl
-from config import MODEL, MAX_TURNS_SPECIALIST
+from config import MODEL_SPECIALIST, MAX_TURNS_SPECIALIST
 
 
 def _has_chainlit_context() -> bool:
@@ -100,7 +100,7 @@ async def run_agent(
     messages.append({"role": "user", "content": user_message})
 
     for turn in range(MAX_TURNS_SPECIALIST):
-        kwargs = {"model": MODEL, "messages": messages}
+        kwargs = {"model": MODEL_SPECIALIST, "messages": messages}
         if tool_schemas:
             kwargs["tools"] = tool_schemas
             kwargs["tool_choice"] = "auto"
@@ -116,7 +116,7 @@ async def run_agent(
                     {"role": "user", "content": content},
                 ]
                 format_response = await client.chat.completions.create(
-                    model=MODEL,
+                    model=MODEL_SPECIALIST,
                     messages=format_msgs,
                     response_format={
                         "type": "json_schema",

@@ -1,5 +1,7 @@
 # ── Model & Loop Settings ─────────────────────────────────────────────
-model: gpt-4o-mini
+models:
+  orchestrator: gpt-4o        # judgment-heavy: intent interpretation, workflow decisions
+  specialist: gpt-4o-mini     # procedure-following: tools do the heavy lifting
 
 max_turns:
   orchestrator: 15
