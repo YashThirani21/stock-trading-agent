@@ -15,7 +15,7 @@ so it remembers previous interactions within the same chat session.
 """
 
 import chainlit as cl
-from agent_loop import run_agent
+from agent_loop import run_agent, _has_chainlit_context
 from config import (
     MARKET_ANALYST_PROMPT, NEWS_ANALYST_PROMPT,
     RISK_MANAGER_PROMPT, TRADER_PROMPT,
@@ -23,8 +23,9 @@ from config import (
 from tools import market_tools, news_tools, risk_tools, trading_tools
 
 
-def _get_agent_messages(agent_name: str, system_prompt: str) -> list:
-    """Get or create a persistent message history for a specialist agent."""
+def _get_agent_messages(agent_name: str, system_prompt: str) -> list | None:
+    if not _has_chainlit_context():
+        return None
     key = f"agent_messages_{agent_name}"
     messages = cl.user_session.get(key)
     if messages is None:
@@ -36,64 +37,92 @@ def _get_agent_messages(agent_name: str, system_prompt: str) -> list:
 # ── Market Analyst ──────────────────────────────────────────────────────
 
 async def call_market_analyst(query: str) -> str:
-    async with cl.Step(name="Market Analyst", type="tool") as step:
-        step.input = query
-        await step.send()
-        messages = _get_agent_messages("market_analyst", MARKET_ANALYST_PROMPT)
+    messages = _get_agent_messages("market_analyst", MARKET_ANALYST_PROMPT)
+    if _has_chainlit_context():
+        async with cl.Step(name="Market Analyst", type="tool") as step:
+            step.input = query
+            await step.send()
+            result = await run_agent(
+                MARKET_ANALYST_PROMPT, query,
+                market_tools.SCHEMAS, market_tools.FUNCTIONS,
+                messages=messages,
+            )
+            step.output = result
+    else:
         result = await run_agent(
             MARKET_ANALYST_PROMPT, query,
             market_tools.SCHEMAS, market_tools.FUNCTIONS,
             messages=messages,
         )
-        step.output = result
     return result
 
 
 # ── News Analyst ────────────────────────────────────────────────────────
 
 async def call_news_analyst(query: str) -> str:
-    async with cl.Step(name="News Analyst", type="tool") as step:
-        step.input = query
-        await step.send()
-        messages = _get_agent_messages("news_analyst", NEWS_ANALYST_PROMPT)
+    messages = _get_agent_messages("news_analyst", NEWS_ANALYST_PROMPT)
+    if _has_chainlit_context():
+        async with cl.Step(name="News Analyst", type="tool") as step:
+            step.input = query
+            await step.send()
+            result = await run_agent(
+                NEWS_ANALYST_PROMPT, query,
+                news_tools.SCHEMAS, news_tools.FUNCTIONS,
+                messages=messages,
+            )
+            step.output = result
+    else:
         result = await run_agent(
             NEWS_ANALYST_PROMPT, query,
             news_tools.SCHEMAS, news_tools.FUNCTIONS,
             messages=messages,
         )
-        step.output = result
     return result
 
 
 # ── Risk Manager ────────────────────────────────────────────────────────
 
 async def call_risk_manager(query: str) -> str:
-    async with cl.Step(name="Risk Manager", type="tool") as step:
-        step.input = query
-        await step.send()
-        messages = _get_agent_messages("risk_manager", RISK_MANAGER_PROMPT)
+    messages = _get_agent_messages("risk_manager", RISK_MANAGER_PROMPT)
+    if _has_chainlit_context():
+        async with cl.Step(name="Risk Manager", type="tool") as step:
+            step.input = query
+            await step.send()
+            result = await run_agent(
+                RISK_MANAGER_PROMPT, query,
+                risk_tools.SCHEMAS, risk_tools.FUNCTIONS,
+                messages=messages,
+            )
+            step.output = result
+    else:
         result = await run_agent(
             RISK_MANAGER_PROMPT, query,
             risk_tools.SCHEMAS, risk_tools.FUNCTIONS,
             messages=messages,
         )
-        step.output = result
     return result
 
 
 # ── Trader ──────────────────────────────────────────────────────────────
 
 async def call_trader(query: str) -> str:
-    async with cl.Step(name="Trader", type="tool") as step:
-        step.input = query
-        await step.send()
-        messages = _get_agent_messages("trader", TRADER_PROMPT)
+    messages = _get_agent_messages("trader", TRADER_PROMPT)
+    if _has_chainlit_context():
+        async with cl.Step(name="Trader", type="tool") as step:
+            step.input = query
+            await step.send()
+            result = await run_agent(
+                TRADER_PROMPT, query,
+                trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
+                messages=messages,
+            )
+            step.output = result
+    else:
         result = await run_agent(
             TRADER_PROMPT, query,
             trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
             messages=messages,
         )
-        step.output = result
     return result
 
 

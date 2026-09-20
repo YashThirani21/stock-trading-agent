@@ -19,6 +19,14 @@ import chainlit as cl
 from config import MODEL, MAX_TURNS_SPECIALIST
 
 
+def _has_chainlit_context() -> bool:
+    try:
+        cl.context.session
+        return True
+    except Exception:
+        return False
+
+
 @track(capture_input=True, capture_output=True)
 def execute_tool(fn_name: str, fn_args: dict, tool_functions: dict) -> str:
     if fn_name in tool_functions:
@@ -68,13 +76,18 @@ async def run_agent(
             fn_name = tool_call.function.name
             fn_args = json.loads(tool_call.function.arguments)
 
-            async with cl.Step(name=fn_name, type="tool") as step:
-                step.input = json.dumps(fn_args, default=str)
-                await step.send()
+            if _has_chainlit_context():
+                async with cl.Step(name=fn_name, type="tool") as step:
+                    step.input = json.dumps(fn_args, default=str)
+                    await step.send()
+                    result = await asyncio.to_thread(
+                        execute_tool, fn_name, fn_args, tool_functions
+                    )
+                    step.output = result
+            else:
                 result = await asyncio.to_thread(
                     execute_tool, fn_name, fn_args, tool_functions
                 )
-                step.output = result
 
             messages.append({
                 "role": "tool",

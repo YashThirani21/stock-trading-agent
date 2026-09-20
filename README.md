@@ -17,6 +17,8 @@ User → Orchestrator → Market Analyst  (yfinance market data)
 
 The orchestrator receives user queries and delegates to specialist agents via tool-calling. Each specialist runs its own ReAct loop (`agent_loop.py`) with dedicated tools. The orchestrator synthesizes their outputs into a final response.
 
+The system uses fully async I/O — `AsyncOpenAI` for non-blocking LLM calls, `asyncio.to_thread` for sync tool execution (yfinance, Alpaca), and TTL-based caching on expensive operations. Stock screening uses batch `yf.download()` to fetch data for all candidates in a single HTTP call instead of per-ticker requests.
+
 ## Running the System
 
 There are two ways to use the system — same orchestrator, different interface:
@@ -28,7 +30,7 @@ chainlit run app.py
 ```
 
 Opens a browser-based chat at `http://localhost:8000` with:
-- Expandable agent steps (see what each specialist did)
+- Expandable agent steps that render immediately as each agent and tool starts
 - Live portfolio sidebar (holdings, cash, P&L)
 - Trade history
 - **Stateful specialists** — agents remember prior interactions within the session
@@ -71,7 +73,7 @@ docker compose up
 |-----------|-----------|---------|
 | LLM | GPT-4o-mini (OpenAI) | Agent reasoning and decisions |
 | Broker | Alpaca | Paper trading execution |
-| Market Data | yfinance | Stock prices, history, fundamentals |
+| Market Data | yfinance | Stock prices, history, fundamentals (batch download for screening) |
 | News | Finnhub | Financial news and sentiment |
 | Web UI | Chainlit | Interactive chat interface |
 | Observability | Opik | LLM and tool call tracing |
@@ -118,7 +120,7 @@ All LLM and tool calls are traced with [Opik](https://www.comet.com/site/product
 ├── main.py             # Terminal REPL (lightweight, no browser)
 ├── orchestrator.py     # Shared orchestrator loop (used by both frontends)
 ├── agents.py           # Specialist agent definitions
-├── agent_loop.py       # Generic ReAct agent loop
+├── agent_loop.py       # Generic async ReAct agent loop
 ├── config.yaml         # All prompts and model settings
 ├── config.py           # Loads config.yaml
 ├── tools/
