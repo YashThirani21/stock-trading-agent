@@ -7,7 +7,7 @@ Each frontend passes an optional callback to hook into agent calls
 """
 
 import json
-from openai import OpenAI
+from openai import AsyncOpenAI
 from opik import track
 from opik.integrations.openai import track_openai
 
@@ -16,7 +16,7 @@ from config import MODEL, MAX_TURNS_ORCHESTRATOR, ORCHESTRATOR_PROMPT
 
 
 def create_client():
-    return track_openai(OpenAI())
+    return track_openai(AsyncOpenAI())
 
 
 def create_messages():
@@ -32,7 +32,7 @@ async def run_orchestrator(client, messages, on_agent_call=None):
     returns, so frontends can log trades, print status, etc.
     """
     for turn in range(MAX_TURNS_ORCHESTRATOR):
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=MODEL,
             messages=messages,
             tools=AGENT_SCHEMAS,

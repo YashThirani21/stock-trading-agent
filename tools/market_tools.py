@@ -1,7 +1,9 @@
 """Market data tools — assigned to the Market Analyst agent."""
 
 import json
+import pandas as pd
 import yfinance as yf
+from cachetools import TTLCache, cached
 
 STOCK_UNIVERSE = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "JPM", "V",
@@ -9,6 +11,49 @@ STOCK_UNIVERSE = [
     "PEP", "COST", "WMT", "BAC", "CRM", "NFLX", "AMD", "INTC", "DIS", "CSCO",
     "ADBE", "CMCSA", "PFE", "NKE", "T", "VZ", "NEE", "LIN", "UNP", "LOW",
 ]
+
+STOCK_METADATA = {
+    "AAPL":  {"name": "Apple Inc.",              "sector": "Technology",         "cap": "large"},
+    "MSFT":  {"name": "Microsoft Corporation",   "sector": "Technology",         "cap": "large"},
+    "GOOGL": {"name": "Alphabet Inc.",           "sector": "Technology",         "cap": "large"},
+    "AMZN":  {"name": "Amazon.com Inc.",         "sector": "Technology",         "cap": "large"},
+    "NVDA":  {"name": "NVIDIA Corporation",      "sector": "Technology",         "cap": "large"},
+    "META":  {"name": "Meta Platforms Inc.",      "sector": "Technology",         "cap": "large"},
+    "CRM":   {"name": "Salesforce Inc.",         "sector": "Technology",         "cap": "large"},
+    "NFLX":  {"name": "Netflix Inc.",            "sector": "Technology",         "cap": "large"},
+    "AMD":   {"name": "Advanced Micro Devices",  "sector": "Technology",         "cap": "mid"},
+    "INTC":  {"name": "Intel Corporation",       "sector": "Technology",         "cap": "mid"},
+    "CSCO":  {"name": "Cisco Systems Inc.",      "sector": "Technology",         "cap": "large"},
+    "ADBE":  {"name": "Adobe Inc.",              "sector": "Technology",         "cap": "large"},
+    "TSLA":  {"name": "Tesla Inc.",              "sector": "Consumer Cyclical",  "cap": "large"},
+    "HD":    {"name": "The Home Depot Inc.",      "sector": "Consumer Cyclical",  "cap": "large"},
+    "NKE":   {"name": "NIKE Inc.",               "sector": "Consumer Cyclical",  "cap": "mid"},
+    "LOW":   {"name": "Lowe's Companies Inc.",   "sector": "Consumer Cyclical",  "cap": "mid"},
+    "BRK-B": {"name": "Berkshire Hathaway Inc.", "sector": "Financial",          "cap": "large"},
+    "JPM":   {"name": "JPMorgan Chase & Co.",    "sector": "Financial",          "cap": "large"},
+    "V":     {"name": "Visa Inc.",               "sector": "Financial",          "cap": "large"},
+    "MA":    {"name": "Mastercard Inc.",          "sector": "Financial",          "cap": "large"},
+    "BAC":   {"name": "Bank of America Corp.",   "sector": "Financial",          "cap": "large"},
+    "UNH":   {"name": "UnitedHealth Group Inc.", "sector": "Healthcare",         "cap": "large"},
+    "JNJ":   {"name": "Johnson & Johnson",       "sector": "Healthcare",         "cap": "large"},
+    "MRK":   {"name": "Merck & Co. Inc.",        "sector": "Healthcare",         "cap": "large"},
+    "ABBV":  {"name": "AbbVie Inc.",             "sector": "Healthcare",         "cap": "large"},
+    "PFE":   {"name": "Pfizer Inc.",             "sector": "Healthcare",         "cap": "mid"},
+    "PG":    {"name": "Procter & Gamble Co.",    "sector": "Consumer Defensive", "cap": "large"},
+    "KO":    {"name": "The Coca-Cola Company",   "sector": "Consumer Defensive", "cap": "large"},
+    "PEP":   {"name": "PepsiCo Inc.",            "sector": "Consumer Defensive", "cap": "large"},
+    "COST":  {"name": "Costco Wholesale Corp.",  "sector": "Consumer Defensive", "cap": "large"},
+    "WMT":   {"name": "Walmart Inc.",            "sector": "Consumer Defensive", "cap": "large"},
+    "CVX":   {"name": "Chevron Corporation",     "sector": "Energy",             "cap": "large"},
+    "XOM":   {"name": "Exxon Mobil Corporation", "sector": "Energy",             "cap": "large"},
+    "DIS":   {"name": "The Walt Disney Company", "sector": "Communication",      "cap": "mid"},
+    "CMCSA": {"name": "Comcast Corporation",     "sector": "Communication",      "cap": "mid"},
+    "T":     {"name": "AT&T Inc.",               "sector": "Communication",      "cap": "mid"},
+    "VZ":    {"name": "Verizon Communications",  "sector": "Communication",      "cap": "mid"},
+    "NEE":   {"name": "NextEra Energy Inc.",     "sector": "Utilities",          "cap": "mid"},
+    "LIN":   {"name": "Linde plc",               "sector": "Basic Materials",    "cap": "large"},
+    "UNP":   {"name": "Union Pacific Corp.",     "sector": "Industrials",        "cap": "mid"},
+}
 
 
 def get_stock_price(ticker: str) -> str:
@@ -33,6 +78,7 @@ def get_stock_price(ticker: str) -> str:
     })
 
 
+@cached(TTLCache(maxsize=64, ttl=600))
 def get_historical_data(ticker: str, period: str = "1mo") -> str:
     stock = yf.Ticker(ticker.upper())
     hist = stock.history(period=period)
@@ -54,6 +100,7 @@ def get_historical_data(ticker: str, period: str = "1mo") -> str:
     return json.dumps({"ticker": ticker.upper(), "period": period, "data": records})
 
 
+@cached(TTLCache(maxsize=64, ttl=600))
 def calculate_indicators(ticker: str) -> str:
     stock = yf.Ticker(ticker.upper())
     hist = stock.history(period="3mo")
@@ -92,35 +139,37 @@ def calculate_indicators(ticker: str) -> str:
     })
 
 
+@cached(TTLCache(maxsize=16, ttl=900))
 def screen_stocks(sector: str = "", signal: str = "any", min_market_cap: str = "any") -> str:
     """Screen stocks from a universe of 40 major US stocks by sector, signal, and market cap."""
-    results = []
-
+    candidates = []
     for ticker in STOCK_UNIVERSE:
+        meta = STOCK_METADATA[ticker]
+        if sector and sector.lower() not in meta["sector"].lower():
+            continue
+        if min_market_cap == "large" and meta["cap"] != "large":
+            continue
+        elif min_market_cap == "mid" and meta["cap"] != "mid":
+            continue
+        candidates.append(ticker)
+
+    if not candidates:
+        return json.dumps({"message": "No stocks matched your criteria. Try broader filters."})
+
+    df = yf.download(candidates, period="3mo", group_by="ticker", progress=False)
+    if df.empty:
+        return json.dumps({"message": "No stocks matched your criteria. Try broader filters."})
+
+    multi = isinstance(df.columns, pd.MultiIndex)
+
+    winners = []
+    for ticker in candidates:
         try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            fast_info = stock.fast_info
-
-            stock_sector = info.get("sector", "Unknown")
-            if sector and sector.lower() not in stock_sector.lower():
+            close = df[ticker]["Close"] if multi else df["Close"]
+            close = close.dropna()
+            if len(close) < 50:
                 continue
 
-            mcap = info.get("marketCap", 0)
-            if min_market_cap == "large" and mcap < 100_000_000_000:
-                continue
-            elif min_market_cap == "mid" and (mcap < 10_000_000_000 or mcap > 100_000_000_000):
-                continue
-
-            price = fast_info.get("lastPrice") or info.get("currentPrice")
-            if not price:
-                continue
-
-            hist = stock.history(period="3mo")
-            if len(hist) < 50:
-                continue
-
-            close = hist["Close"]
             sma_20 = close.rolling(20).mean().iloc[-1]
             sma_50 = close.rolling(50).mean().iloc[-1]
 
@@ -141,24 +190,41 @@ def screen_stocks(sector: str = "", signal: str = "any", min_market_cap: str = "
             elif signal == "bearish" and trend != "BEARISH":
                 continue
 
-            results.append({
-                "ticker": ticker,
-                "name": info.get("shortName", ticker),
-                "sector": stock_sector,
-                "price": round(price, 2),
-                "rsi_14": rsi,
-                "trend": trend,
-                "pe_ratio": info.get("trailingPE"),
-                "market_cap_b": round(mcap / 1_000_000_000, 1) if mcap else None,
-            })
-
-            if len(results) >= 10:
+            winners.append({"ticker": ticker, "rsi": rsi, "trend": trend})
+            if len(winners) >= 10:
                 break
         except Exception:
             continue
 
-    if not results:
+    if not winners:
         return json.dumps({"message": "No stocks matched your criteria. Try broader filters."})
+
+    results = []
+    for w in winners:
+        ticker = w["ticker"]
+        meta = STOCK_METADATA[ticker]
+        try:
+            info = yf.Ticker(ticker).info
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            results.append({
+                "ticker": ticker,
+                "name": meta["name"],
+                "sector": meta["sector"],
+                "price": round(price, 2) if price else None,
+                "rsi_14": w["rsi"],
+                "trend": w["trend"],
+                "pe_ratio": info.get("trailingPE"),
+            })
+        except Exception:
+            results.append({
+                "ticker": ticker,
+                "name": meta["name"],
+                "sector": meta["sector"],
+                "price": None,
+                "rsi_14": w["rsi"],
+                "trend": w["trend"],
+                "pe_ratio": None,
+            })
 
     return json.dumps({"matches": len(results), "stocks": results})
 

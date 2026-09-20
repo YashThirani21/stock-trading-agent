@@ -38,6 +38,7 @@ def _get_agent_messages(agent_name: str, system_prompt: str) -> list:
 async def call_market_analyst(query: str) -> str:
     async with cl.Step(name="Market Analyst", type="tool") as step:
         step.input = query
+        await step.send()
         messages = _get_agent_messages("market_analyst", MARKET_ANALYST_PROMPT)
         result = await run_agent(
             MARKET_ANALYST_PROMPT, query,
@@ -53,6 +54,7 @@ async def call_market_analyst(query: str) -> str:
 async def call_news_analyst(query: str) -> str:
     async with cl.Step(name="News Analyst", type="tool") as step:
         step.input = query
+        await step.send()
         messages = _get_agent_messages("news_analyst", NEWS_ANALYST_PROMPT)
         result = await run_agent(
             NEWS_ANALYST_PROMPT, query,
@@ -68,6 +70,7 @@ async def call_news_analyst(query: str) -> str:
 async def call_risk_manager(query: str) -> str:
     async with cl.Step(name="Risk Manager", type="tool") as step:
         step.input = query
+        await step.send()
         messages = _get_agent_messages("risk_manager", RISK_MANAGER_PROMPT)
         result = await run_agent(
             RISK_MANAGER_PROMPT, query,
@@ -83,6 +86,7 @@ async def call_risk_manager(query: str) -> str:
 async def call_trader(query: str) -> str:
     async with cl.Step(name="Trader", type="tool") as step:
         step.input = query
+        await step.send()
         messages = _get_agent_messages("trader", TRADER_PROMPT)
         result = await run_agent(
             TRADER_PROMPT, query,

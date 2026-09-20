@@ -9,9 +9,10 @@ Supports both stateless (fresh messages each call) and stateful (persistent
 messages across calls) modes via the optional `messages` parameter.
 """
 
+import asyncio
 import json
 from typing import Optional
-from openai import OpenAI
+from openai import AsyncOpenAI
 from opik import track
 from opik.integrations.openai import track_openai
 import chainlit as cl
@@ -19,7 +20,7 @@ from config import MODEL, MAX_TURNS_SPECIALIST
 
 
 @track(capture_input=True, capture_output=True)
-async def execute_tool(fn_name: str, fn_args: dict, tool_functions: dict) -> str:
+def execute_tool(fn_name: str, fn_args: dict, tool_functions: dict) -> str:
     if fn_name in tool_functions:
         result = tool_functions[fn_name](**fn_args)
     else:
@@ -41,7 +42,7 @@ async def run_agent(
     If `messages` is provided, the agent appends to it (stateful — remembers
     previous calls). If None, creates a fresh conversation (stateless).
     """
-    client = track_openai(OpenAI())
+    client = track_openai(AsyncOpenAI())
 
     if messages is None:
         messages = [
@@ -56,7 +57,7 @@ async def run_agent(
             kwargs["tools"] = tool_schemas
             kwargs["tool_choice"] = "auto"
 
-        response = client.chat.completions.create(**kwargs)
+        response = await client.chat.completions.create(**kwargs)
         assistant_message = response.choices[0].message
         messages.append(assistant_message.model_dump())
 
@@ -69,7 +70,10 @@ async def run_agent(
 
             async with cl.Step(name=fn_name, type="tool") as step:
                 step.input = json.dumps(fn_args, default=str)
-                result = await execute_tool(fn_name, fn_args, tool_functions)
+                await step.send()
+                result = await asyncio.to_thread(
+                    execute_tool, fn_name, fn_args, tool_functions
+                )
                 step.output = result
 
             messages.append({

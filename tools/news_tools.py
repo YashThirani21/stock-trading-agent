@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta
 
 import requests
+from cachetools import TTLCache, cached
 
 
 def _finnhub_key():
@@ -14,6 +15,7 @@ def _finnhub_key():
     return key
 
 
+@cached(TTLCache(maxsize=32, ttl=600))
 def get_news(ticker: str, days: int = 7) -> str:
     """Fetch recent company-specific news headlines."""
     try:
@@ -48,6 +50,7 @@ def get_news(ticker: str, days: int = 7) -> str:
         return json.dumps({"error": str(e)})
 
 
+@cached(TTLCache(maxsize=8, ttl=600))
 def get_market_news(category: str = "general") -> str:
     """Fetch general market news. category: general, forex, crypto, merger."""
     try:
