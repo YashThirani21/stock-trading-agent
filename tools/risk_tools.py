@@ -116,6 +116,7 @@ def update_watchlist(action: str, ticker: str, condition: str = "", threshold: f
     threshold (for add): the numeric threshold
     note (for add): optional reminder of why
     """
+    note = note[:200]
     wl = _load_watchlist()
 
     if action == "remove":
