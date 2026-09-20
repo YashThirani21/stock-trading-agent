@@ -14,13 +14,42 @@ Stateful: each specialist's message history is stored in cl.user_session
 so it remembers previous interactions within the same chat session.
 """
 
+import re
+
 import chainlit as cl
+from pydantic import ValidationError
+
 from agent_loop import run_agent, _has_chainlit_context
 from config import (
     MARKET_ANALYST_PROMPT, NEWS_ANALYST_PROMPT,
     RISK_MANAGER_PROMPT, TRADER_PROMPT,
 )
+from schemas import TradeOrder
 from tools import market_tools, news_tools, risk_tools, trading_tools
+
+
+_TRADE_EVAL_PATTERN = re.compile(
+    r'\b(buy|sell|trade|safe|approve|position siz)', re.IGNORECASE
+)
+
+
+def _is_trade_eval(query: str) -> bool:
+    if re.search(r'\bwatchlist\b', query, re.IGNORECASE):
+        return False
+    return bool(_TRADE_EVAL_PATTERN.search(query))
+
+
+RISK_APPROVAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "decision": {"type": "string", "enum": ["APPROVE", "REJECT"]},
+        "recommended_qty": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        "reason": {"type": "string"},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["decision", "recommended_qty", "reason", "warnings"],
+    "additionalProperties": False,
+}
 
 
 def _get_agent_messages(agent_name: str, system_prompt: str) -> list | None:
@@ -86,6 +115,7 @@ async def call_news_analyst(query: str) -> str:
 
 async def call_risk_manager(query: str) -> str:
     messages = _get_agent_messages("risk_manager", RISK_MANAGER_PROMPT)
+    schema = RISK_APPROVAL_SCHEMA if _is_trade_eval(query) else None
     if _has_chainlit_context():
         async with cl.Step(name="Risk Manager", type="tool") as step:
             step.input = query
@@ -95,6 +125,7 @@ async def call_risk_manager(query: str) -> str:
                 risk_tools.SCHEMAS, risk_tools.FUNCTIONS,
                 messages=messages,
                 parent_step=step,
+                response_schema=schema,
             )
             step.output = result
     else:
@@ -102,20 +133,44 @@ async def call_risk_manager(query: str) -> str:
             RISK_MANAGER_PROMPT, query,
             risk_tools.SCHEMAS, risk_tools.FUNCTIONS,
             messages=messages,
+            response_schema=schema,
         )
     return result
 
 
 # ── Trader ──────────────────────────────────────────────────────────────
 
-async def call_trader(query: str) -> str:
+async def call_trader(
+    ticker: str,
+    qty: int,
+    side: str,
+    order_type: str = "market",
+    limit_price: float | None = None,
+    stop_price: float | None = None,
+) -> str:
+    try:
+        order = TradeOrder(
+            ticker=ticker, qty=qty, side=side, order_type=order_type,
+            limit_price=limit_price, stop_price=stop_price,
+        )
+    except ValidationError as e:
+        return f"Trade rejected — invalid order: {e.errors()}"
+
+    if order.order_type == "market":
+        instruction = f"Place a market order: {order.side} {order.qty} shares of {order.ticker}"
+    elif order.order_type == "limit":
+        instruction = f"Place a limit order: {order.side} {order.qty} shares of {order.ticker} at ${order.limit_price}"
+    elif order.order_type == "stop_loss":
+        instruction = f"Place a stop-loss order: sell {order.qty} shares of {order.ticker} at stop price ${order.stop_price}"
+
     messages = _get_agent_messages("trader", TRADER_PROMPT)
+    step_input = order.model_dump_json(indent=2)
     if _has_chainlit_context():
         async with cl.Step(name="Trader", type="tool") as step:
-            step.input = query
+            step.input = step_input
             await step.send()
             result = await run_agent(
-                TRADER_PROMPT, query,
+                TRADER_PROMPT, instruction,
                 trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
                 messages=messages,
                 parent_step=step,
@@ -123,7 +178,7 @@ async def call_trader(query: str) -> str:
             step.output = result
     else:
         result = await run_agent(
-            TRADER_PROMPT, query,
+            TRADER_PROMPT, instruction,
             trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
             messages=messages,
         )
@@ -186,13 +241,18 @@ AGENT_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "call_trader",
-            "description": "Ask the Trader to execute a specific trade that has been approved. Also checks order status. ONLY call after the Risk Manager has approved.",
+            "description": "Execute a trade that has been approved by the user and risk-checked. Provide structured order details. ONLY call after user explicitly confirms.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "What to execute, e.g. 'Buy 15 shares of TSLA at market price' or 'Place a stop-loss on TSLA at $230 for 15 shares'"}
+                    "ticker": {"type": "string", "description": "Stock ticker symbol (e.g. TSLA, AAPL)"},
+                    "qty": {"type": "integer", "description": "Number of shares (1-100)"},
+                    "side": {"type": "string", "enum": ["buy", "sell"]},
+                    "order_type": {"type": "string", "enum": ["market", "limit", "stop_loss"], "default": "market"},
+                    "limit_price": {"type": "number", "description": "Required for limit orders — the price to buy/sell at"},
+                    "stop_price": {"type": "number", "description": "Required for stop_loss orders — the trigger price"},
                 },
-                "required": ["query"],
+                "required": ["ticker", "qty", "side"],
             },
         },
     },

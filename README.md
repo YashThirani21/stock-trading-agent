@@ -61,12 +61,30 @@ docker compose up
 # Open http://localhost:8000
 ```
 
-## Trading Guardrails
+## Safety & Guardrails
+
+### Trading Guardrails
 
 - Max 100 shares per order
 - Buy orders capped at 20% of buying power
 - Stop-loss requires existing position of sufficient size
 - Risk Manager enforces: no single stock >20% of portfolio, no sector >40%, keep 20% cash reserve
+- **User confirmation required** — the system analyzes and recommends, but never executes a trade without the user's explicit go-ahead. Exploratory language ("thinking of selling", "should I buy?") is treated as a request for analysis only.
+
+### Structured Validation (Pydantic + JSON Schema)
+
+Trade execution and risk approval use structured validation at two layers:
+
+- **Pydantic (Python)** — The `TradeOrder` model in `schemas.py` validates trade inputs (ticker format, qty 1-100, side buy/sell, required prices for limit/stop orders) *before* the Trader agent runs. Invalid orders are rejected without an LLM call.
+- **JSON Schema (OpenAI API)** — The Risk Manager's trade evaluations are forced into a structured `RiskApproval` format (`APPROVE`/`REJECT` + qty + reason + warnings) via OpenAI's `response_format`. The orchestrator's tool call to the Trader uses typed fields with enums instead of free-text.
+
+### Prompt Injection Defenses
+
+The system handles untrusted external data (news headlines, market data) with three layers of defense:
+
+- **Prompt hardening** — Each specialist's system prompt marks tool output as raw data and instructs the agent to never follow instructions found within it. The orchestrator treats agent responses as analysis, not orders — urgency from one agent never lets it skip workflow steps.
+- **Data sanitization** — News headlines and summaries pass through a `_sanitize()` filter that strips common injection patterns before reaching the LLM.
+- **Scope restrictions** — The orchestrator and all specialists are constrained to stock/portfolio topics and will decline unrelated requests.
 
 ## Tech Stack
 
@@ -77,6 +95,7 @@ docker compose up
 | Market Data | yfinance | Stock prices, history, fundamentals (batch download for screening) |
 | News | Finnhub | Financial news and sentiment |
 | Web UI | Chainlit | Interactive chat interface |
+| Validation | Pydantic | Structured input/output validation |
 | Observability | Opik | LLM and tool call tracing |
 
 ## Prerequisites
@@ -124,6 +143,7 @@ All LLM and tool calls are traced with [Opik](https://www.comet.com/site/product
 ├── agent_loop.py       # Generic async ReAct agent loop
 ├── config.yaml         # All prompts and model settings
 ├── config.py           # Loads config.yaml
+├── schemas.py          # Pydantic models (TradeOrder, RiskApproval)
 ├── tools/
 │   ├── market_tools.py # Market data via yfinance
 │   ├── news_tools.py   # News via Finnhub

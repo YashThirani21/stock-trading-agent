@@ -82,6 +82,7 @@ async def run_agent(
     tool_functions: dict,
     messages: Optional[list] = None,
     parent_step=None,
+    response_schema: Optional[dict] = None,
 ) -> str:
     """
     Run a complete agent turn: prompt -> tool calls -> final response.
@@ -109,6 +110,24 @@ async def run_agent(
         messages.append(msg_dict)
 
         if not tc_list:
+            if response_schema and content:
+                format_msgs = [
+                    {"role": "system", "content": "Convert the following analysis into the required JSON format. Preserve all information accurately."},
+                    {"role": "user", "content": content},
+                ]
+                format_response = await client.chat.completions.create(
+                    model=MODEL,
+                    messages=format_msgs,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "response",
+                            "strict": True,
+                            "schema": response_schema,
+                        },
+                    },
+                )
+                return format_response.choices[0].message.content or content
             return content or ""
 
         for tc in tc_list:
