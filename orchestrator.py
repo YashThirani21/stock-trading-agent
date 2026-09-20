@@ -3,7 +3,7 @@ Shared orchestrator loop — the "boss" agent that coordinates specialists.
 
 Used by both app.py (Chainlit web UI) and main.py (terminal REPL).
 Each frontend passes an optional callback to hook into agent calls
-(e.g. trade logging for the sidebar, or terminal print statements).
+(e.g. terminal print statements).
 """
 
 import json

@@ -165,7 +165,7 @@ SCHEMAS = [
         "type": "function",
         "function": {
             "name": "place_order",
-            "description": "Place a market order (buy or sell). Executes immediately at current price during market hours. Guardrails: max 100 shares, max 20% of buying power per buy.",
+            "description": "Place a market order (buy or sell). Submit anytime — fills at market price during hours, queued outside hours. Guardrails: max 100 shares, max 20% of buying power per buy.",
             "parameters": {
                 "type": "object",
                 "properties": {

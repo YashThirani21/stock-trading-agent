@@ -14,7 +14,7 @@ Stateful: each specialist's message history is stored in cl.user_session
 so it remembers previous interactions within the same chat session.
 """
 
-import re
+import asyncio
 
 import chainlit as cl
 from pydantic import ValidationError
@@ -22,9 +22,11 @@ from pydantic import ValidationError
 from agent_loop import run_agent, _has_chainlit_context
 from config import (
     MARKET_ANALYST_PROMPT, NEWS_ANALYST_PROMPT,
-    RISK_MANAGER_PROMPT, TRADER_PROMPT,
+    RISK_MANAGER_PROMPT,
 )
 from schemas import TradeOrder
+import re
+
 from tools import market_tools, news_tools, risk_tools, trading_tools
 
 
@@ -150,38 +152,57 @@ async def call_trader(
 ) -> str:
     try:
         order = TradeOrder(
-            ticker=ticker, qty=qty, side=side, order_type=order_type,
+            ticker=ticker.upper(), qty=qty, side=side.lower(), order_type=order_type,
             limit_price=limit_price, stop_price=stop_price,
         )
     except ValidationError as e:
         return f"Trade rejected — invalid order: {e.errors()}"
 
-    if order.order_type == "market":
-        instruction = f"Place a market order: {order.side} {order.qty} shares of {order.ticker}"
-    elif order.order_type == "limit":
-        instruction = f"Place a limit order: {order.side} {order.qty} shares of {order.ticker} at ${order.limit_price}"
-    elif order.order_type == "stop_loss":
-        instruction = f"Place a stop-loss order: sell {order.qty} shares of {order.ticker} at stop price ${order.stop_price}"
+    if order.order_type == "limit" and order.limit_price is not None:
+        summary = f"{order.side.upper()} {order.qty} shares of {order.ticker} (limit order @ ${order.limit_price:.2f})"
+    elif order.order_type == "stop_loss" and order.stop_price is not None:
+        summary = f"SELL {order.qty} shares of {order.ticker} (stop-loss @ ${order.stop_price:.2f})"
+    else:
+        summary = f"{order.side.upper()} {order.qty} shares of {order.ticker} (market order)"
 
-    messages = _get_agent_messages("trader", TRADER_PROMPT)
-    step_input = order.model_dump_json(indent=2)
+    if _has_chainlit_context():
+        res = await cl.AskActionMessage(
+            content=f"**Trade Confirmation**\n\n{summary}\n\nDo you want to proceed?",
+            actions=[
+                cl.Action(name="confirm", label="Confirm Trade", payload={"action": "confirm"}),
+                cl.Action(name="cancel", label="Cancel", payload={"action": "cancel"}),
+            ],
+            timeout=120,
+        ).send()
+        if not res or res.get("name") != "confirm":
+            return "Trade cancelled by user."
+    else:
+        confirm = await asyncio.to_thread(input, f"\n⚠️  {summary}\nConfirm? [y/n]: ")
+        if confirm.strip().lower() not in ("y", "yes"):
+            return "Trade cancelled by user."
+
+    if order.order_type == "limit":
+        execute = lambda: trading_tools.place_limit_order(
+            order.ticker, order.qty, order.side, order.limit_price,
+        )
+    elif order.order_type == "stop_loss":
+        execute = lambda: trading_tools.place_stop_loss(
+            order.ticker, order.qty, order.stop_price,
+        )
+    else:
+        execute = lambda: trading_tools.place_order(
+            order.ticker, order.qty, order.side,
+        )
+
     if _has_chainlit_context():
         async with cl.Step(name="Trader", type="tool") as step:
-            step.input = step_input
+            step.input = summary
             await step.send()
-            result = await run_agent(
-                TRADER_PROMPT, instruction,
-                trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
-                messages=messages,
-                parent_step=step,
-            )
+            result = await asyncio.to_thread(execute)
             step.output = result
     else:
-        result = await run_agent(
-            TRADER_PROMPT, instruction,
-            trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
-            messages=messages,
-        )
+        result = await asyncio.to_thread(execute)
+
     return result
 
 
@@ -227,7 +248,7 @@ AGENT_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "call_risk_manager",
-            "description": "Ask the Risk Manager to check portfolio exposure, assess whether a trade is safe, and recommend position sizing. Also manages the watchlist.",
+            "description": "Look up the user's current holdings and portfolio, check exposure and concentration risk, assess whether a trade is safe, or manage the watchlist. Call this first whenever you need to know what the user owns.",
             "parameters": {
                 "type": "object",
                 "properties": {
