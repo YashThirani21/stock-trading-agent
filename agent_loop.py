@@ -28,7 +28,9 @@ def _has_chainlit_context() -> bool:
 
 
 async def _stream_completion(client, kwargs, on_token=None):
-    stream = await client.chat.completions.create(**kwargs, stream=True)
+    stream = await client.chat.completions.create(
+        **kwargs, stream=True, stream_options={"include_usage": True}
+    )
 
     content = ""
     tool_calls = {}
