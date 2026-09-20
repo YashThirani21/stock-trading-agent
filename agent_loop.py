@@ -27,6 +27,42 @@ def _has_chainlit_context() -> bool:
         return False
 
 
+async def _stream_completion(client, kwargs, on_token=None):
+    stream = await client.chat.completions.create(**kwargs, stream=True)
+
+    content = ""
+    tool_calls = {}
+
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        choice = chunk.choices[0]
+        delta = choice.delta
+
+        if delta.content:
+            content += delta.content
+            if on_token:
+                await on_token(delta.content)
+
+        if delta.tool_calls:
+            for tc_delta in delta.tool_calls:
+                idx = tc_delta.index
+                if idx not in tool_calls:
+                    tool_calls[idx] = {
+                        "id": tc_delta.id,
+                        "type": "function",
+                        "function": {"name": tc_delta.function.name, "arguments": ""},
+                    }
+                if tc_delta.function and tc_delta.function.arguments:
+                    tool_calls[idx]["function"]["arguments"] += tc_delta.function.arguments
+
+    msg_dict = {"role": "assistant", "content": content or None}
+    if tool_calls:
+        msg_dict["tool_calls"] = list(tool_calls.values())
+
+    return content or None, list(tool_calls.values()) if tool_calls else None, msg_dict
+
+
 @track(capture_input=True, capture_output=True)
 def execute_tool(fn_name: str, fn_args: dict, tool_functions: dict) -> str:
     if fn_name in tool_functions:
@@ -43,6 +79,7 @@ async def run_agent(
     tool_schemas: list,
     tool_functions: dict,
     messages: Optional[list] = None,
+    parent_step=None,
 ) -> str:
     """
     Run a complete agent turn: prompt -> tool calls -> final response.
@@ -65,16 +102,16 @@ async def run_agent(
             kwargs["tools"] = tool_schemas
             kwargs["tool_choice"] = "auto"
 
-        response = await client.chat.completions.create(**kwargs)
-        assistant_message = response.choices[0].message
-        messages.append(assistant_message.model_dump())
+        on_token = parent_step.stream_token if parent_step else None
+        content, tc_list, msg_dict = await _stream_completion(client, kwargs, on_token=on_token)
+        messages.append(msg_dict)
 
-        if not assistant_message.tool_calls:
-            return assistant_message.content or ""
+        if not tc_list:
+            return content or ""
 
-        for tool_call in assistant_message.tool_calls:
-            fn_name = tool_call.function.name
-            fn_args = json.loads(tool_call.function.arguments)
+        for tc in tc_list:
+            fn_name = tc["function"]["name"]
+            fn_args = json.loads(tc["function"]["arguments"])
 
             if _has_chainlit_context():
                 async with cl.Step(name=fn_name, type="tool") as step:
@@ -91,7 +128,7 @@ async def run_agent(
 
             messages.append({
                 "role": "tool",
-                "tool_call_id": tool_call.id,
+                "tool_call_id": tc["id"],
                 "content": result,
             })
 

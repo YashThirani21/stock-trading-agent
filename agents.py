@@ -46,6 +46,7 @@ async def call_market_analyst(query: str) -> str:
                 MARKET_ANALYST_PROMPT, query,
                 market_tools.SCHEMAS, market_tools.FUNCTIONS,
                 messages=messages,
+                parent_step=step,
             )
             step.output = result
     else:
@@ -69,6 +70,7 @@ async def call_news_analyst(query: str) -> str:
                 NEWS_ANALYST_PROMPT, query,
                 news_tools.SCHEMAS, news_tools.FUNCTIONS,
                 messages=messages,
+                parent_step=step,
             )
             step.output = result
     else:
@@ -92,6 +94,7 @@ async def call_risk_manager(query: str) -> str:
                 RISK_MANAGER_PROMPT, query,
                 risk_tools.SCHEMAS, risk_tools.FUNCTIONS,
                 messages=messages,
+                parent_step=step,
             )
             step.output = result
     else:
@@ -115,6 +118,7 @@ async def call_trader(query: str) -> str:
                 TRADER_PROMPT, query,
                 trading_tools.SCHEMAS, trading_tools.FUNCTIONS,
                 messages=messages,
+                parent_step=step,
             )
             step.output = result
     else:

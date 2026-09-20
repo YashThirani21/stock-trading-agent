@@ -17,7 +17,7 @@ User → Orchestrator → Market Analyst  (yfinance market data)
 
 The orchestrator receives user queries and delegates to specialist agents via tool-calling. Each specialist runs its own ReAct loop (`agent_loop.py`) with dedicated tools. The orchestrator synthesizes their outputs into a final response.
 
-The system uses fully async I/O — `AsyncOpenAI` for non-blocking LLM calls, `asyncio.to_thread` for sync tool execution (yfinance, Alpaca), and TTL-based caching on expensive operations. Stock screening uses batch `yf.download()` to fetch data for all candidates in a single HTTP call instead of per-ticker requests.
+The system uses fully async I/O — `AsyncOpenAI` for non-blocking LLM calls, `asyncio.to_thread` for sync tool execution (yfinance, Alpaca), and TTL-based caching on expensive operations. Stock screening uses batch `yf.download()` to fetch data for all candidates in a single HTTP call instead of per-ticker requests. All LLM responses are streamed — specialist agent reasoning appears live inside expandable steps, and the orchestrator's final answer streams token-by-token into the chat.
 
 ## Running the System
 
@@ -30,6 +30,7 @@ chainlit run app.py
 ```
 
 Opens a browser-based chat at `http://localhost:8000` with:
+- Streaming responses — specialist reasoning and final answers appear token-by-token
 - Expandable agent steps that render immediately as each agent and tool starts
 - Live portfolio sidebar (holdings, cash, P&L)
 - Trade history

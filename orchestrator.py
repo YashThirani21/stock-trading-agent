@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 from opik import track
 from opik.integrations.openai import track_openai
 
+from agent_loop import _stream_completion
 from agents import AGENT_SCHEMAS, AGENT_FUNCTIONS
 from config import MODEL, MAX_TURNS_ORCHESTRATOR, ORCHESTRATOR_PROMPT
 
@@ -24,7 +25,7 @@ def create_messages():
 
 
 @track(name="orchestrator", capture_input=True, capture_output=True)
-async def run_orchestrator(client, messages, on_agent_call=None):
+async def run_orchestrator(client, messages, on_agent_call=None, on_token=None):
     """
     Run one orchestrator turn — may involve multiple specialist agent calls.
 
@@ -32,22 +33,21 @@ async def run_orchestrator(client, messages, on_agent_call=None):
     returns, so frontends can log trades, print status, etc.
     """
     for turn in range(MAX_TURNS_ORCHESTRATOR):
-        response = await client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=AGENT_SCHEMAS,
-            tool_choice="auto",
-        )
+        kwargs = {
+            "model": MODEL,
+            "messages": messages,
+            "tools": AGENT_SCHEMAS,
+            "tool_choice": "auto",
+        }
+        content, tc_list, msg_dict = await _stream_completion(client, kwargs, on_token=on_token)
+        messages.append(msg_dict)
 
-        assistant_message = response.choices[0].message
-        messages.append(assistant_message.model_dump())
+        if not tc_list:
+            return content or ""
 
-        if not assistant_message.tool_calls:
-            return assistant_message.content or ""
-
-        for tool_call in assistant_message.tool_calls:
-            fn_name = tool_call.function.name
-            fn_args = json.loads(tool_call.function.arguments)
+        for tc in tc_list:
+            fn_name = tc["function"]["name"]
+            fn_args = json.loads(tc["function"]["arguments"])
 
             if fn_name in AGENT_FUNCTIONS:
                 result = await AGENT_FUNCTIONS[fn_name](**fn_args)
@@ -59,7 +59,7 @@ async def run_orchestrator(client, messages, on_agent_call=None):
 
             messages.append({
                 "role": "tool",
-                "tool_call_id": tool_call.id,
+                "tool_call_id": tc["id"],
                 "content": result,
             })
 

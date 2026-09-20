@@ -118,7 +118,14 @@ async def handle_message(message: cl.Message):
 
     messages.append({"role": "user", "content": message.content})
 
-    response = await run_orchestrator(client, messages, on_agent_call=log_trade)
+    msg = cl.Message(content="")
+    await msg.send()
 
-    await cl.Message(content=response).send()
+    response = await run_orchestrator(
+        client, messages,
+        on_agent_call=log_trade,
+        on_token=msg.stream_token,
+    )
+
+    await msg.update()
     await update_sidebar()
